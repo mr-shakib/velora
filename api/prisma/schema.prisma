@@ -1,0 +1,538 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  UNLINKED
+  ACTIVE
+}
+
+enum CoupleStatus {
+  ACTIVE
+  UNLINK_REQUESTED
+  DISSOLVED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum MoodEmoji {
+  HAPPY
+  LOVED
+  CALM
+  TIRED
+  SAD
+  EXCITED
+  GRATEFUL
+  MISSING_YOU
+}
+
+enum BucketStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PlannerEventStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  NEW_MEMORY
+  NEW_MESSAGE
+  MISS_YOU
+  UPCOMING_DATE
+  ANNIVERSARY
+  BIRTHDAY
+  BUCKET_COMPLETED
+  INVITE_ACCEPTED
+  UNLINK_REQUESTED
+  SYSTEM
+}
+
+enum AiTask {
+  MONTHLY_RECAP
+  CAPTION_SUGGEST
+  DATE_IDEAS
+  MEMORY_SUMMARY
+  RELATIONSHIP_PROMPT
+}
+
+enum FcmPlatform {
+  WEB
+  ANDROID
+  IOS
+}
+
+enum MessageAttachmentType {
+  IMAGE
+  VIDEO
+}
+
+enum UnlinkRequester {
+  USER1
+  USER2
+}
+
+// ─────────────────────────────────────────────────────────────
+// USER
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  passwordHash   String?
+  displayName    String
+  avatarPublicId String?
+  bio            String?
+  birthday       DateTime?
+  timezone       String     @default("UTC")
+  status         UserStatus @default(PENDING_VERIFICATION)
+  coupleId       String?
+  googleId       String?    @unique
+  aiConsentGiven Boolean    @default(false)
+  aiConsentAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  couple           Couple?           @relation("CoupleMembers", fields: [coupleId], references: [id])
+  otps             Otp[]
+  refreshTokens    RefreshToken[]
+  fcmTokens        FcmToken[]
+  moods            Mood[]
+  memories         Memory[]
+  timelineEvents   TimelineEvent[]
+  messages         Message[]
+  messageReactions MessageReaction[]
+  notifications    Notification[]
+  bucketItems      BucketItem[]
+  plannerEvents    PlannerEvent[]
+  invitesSent      InviteLink[]
+  aiOutputs        AiOutput[]
+
+  @@index([email])
+  @@index([coupleId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// COUPLE
+// ─────────────────────────────────────────────────────────────
+
+model Couple {
+  id                String          @id @default(cuid())
+  status            CoupleStatus    @default(ACTIVE)
+  relationshipStart DateTime
+  usedStorageBytes  BigInt          @default(0)
+  maxStorageBytes   BigInt          @default(10737418240)
+  unlinkRequestedBy UnlinkRequester?
+  unlinkRequestedAt DateTime?
+  dissolvedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  members       User[]          @relation("CoupleMembers")
+  theme         Theme?
+  memories      Memory[]
+  albums        Album[]
+  timelineEvents TimelineEvent[]
+  messages      Message[]
+  plannerEvents PlannerEvent[]
+  bucketItems   BucketItem[]
+  notifications Notification[]
+  countdowns    Countdown[]
+  aiOutputs     AiOutput[]
+  inviteLinks   InviteLink[]
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// INVITE LINK
+// ─────────────────────────────────────────────────────────────
+
+model InviteLink {
+  id         String       @id @default(cuid())
+  token      String       @unique @default(cuid())
+  coupleId   String?
+  inviterId  String
+  status     InviteStatus @default(PENDING)
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime     @default(now())
+
+  inviter User    @relation(fields: [inviterId], references: [id])
+  couple  Couple? @relation(fields: [coupleId], references: [id])
+
+  @@index([token])
+  @@index([inviterId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUTH TOKENS
+// ─────────────────────────────────────────────────────────────
+
+model Otp {
+  id        String    @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  deviceInfo String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model FcmToken {
+  id         String      @id @default(cuid())
+  userId     String
+  token      String      @unique
+  platform   FcmPlatform @default(WEB)
+  deviceInfo String?
+  lastUsedAt DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// THEME
+// ─────────────────────────────────────────────────────────────
+
+model Theme {
+  id         String   @id @default(cuid())
+  coupleId   String   @unique
+  preset     String   @default("cream-mint")
+  bg         String   @default("#F8F4EC")
+  surface    String   @default("#FFFFFF")
+  primary    String   @default("#A8D5BA")
+  primaryDim String   @default("#8EC4A6")
+  secondary  String   @default("#5C7A6B")
+  text       String   @default("#2B2B2B")
+  muted      String   @default("#8C8C8C")
+  border     String   @default("#E5E0D8")
+  updatedAt  DateTime @updatedAt
+
+  couple Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// MOOD
+// ─────────────────────────────────────────────────────────────
+
+model Mood {
+  id        String    @id @default(cuid())
+  userId    String
+  mood      MoodEmoji
+  note      String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// MEMORIES
+// ─────────────────────────────────────────────────────────────
+
+model Memory {
+  id         String     @id @default(cuid())
+  coupleId   String
+  authorId   String
+  albumId    String?
+  caption    String?
+  location   String?
+  city       String?
+  country    String?
+  mood       MoodEmoji?
+  tags       String[]
+  memoryDate DateTime
+  isPrivate  Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  couple           Couple        @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  author           User          @relation(fields: [authorId], references: [id])
+  album            Album?        @relation(fields: [albumId], references: [id])
+  media            MemoryMedia[]
+  pinnedInMessages Message[]     @relation("PinnedMemory")
+
+  @@index([coupleId])
+  @@index([authorId])
+  @@index([albumId])
+  @@index([memoryDate])
+  @@index([coupleId, memoryDate])
+}
+
+model MemoryMedia {
+  id          String    @id @default(cuid())
+  memoryId    String
+  publicId    String    @unique
+  mediaType   MediaType
+  url         String
+  width       Int?
+  height      Int?
+  durationSec Int?
+  bytes       Int
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  memory Memory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@index([memoryId])
+}
+
+model Album {
+  id            String   @id @default(cuid())
+  coupleId      String
+  name          String
+  description   String?
+  coverPublicId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  couple   Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  memories Memory[]
+
+  @@index([coupleId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TIMELINE
+// ─────────────────────────────────────────────────────────────
+
+model TimelineEvent {
+  id            String   @id @default(cuid())
+  coupleId      String
+  authorId      String
+  title         String
+  story         String?
+  eventDate     DateTime
+  location      String?
+  mediaPublicId String?
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  couple Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([coupleId])
+  @@index([coupleId, eventDate])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PLANNER
+// ─────────────────────────────────────────────────────────────
+
+model PlannerEvent {
+  id          String             @id @default(cuid())
+  coupleId    String
+  creatorId   String
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime
+  endsAt      DateTime?
+  budget      Decimal?           @db.Decimal(10, 2)
+  status      PlannerEventStatus @default(UPCOMING)
+  reminderAt  DateTime?
+  checklist   Json               @default("[]")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  couple  Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [creatorId], references: [id])
+
+  @@index([coupleId])
+  @@index([coupleId, startsAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// BUCKET LIST
+// ─────────────────────────────────────────────────────────────
+
+model BucketItem {
+  id            String       @id @default(cuid())
+  coupleId      String
+  creatorId     String
+  title         String
+  description   String?
+  category      String?
+  status        BucketStatus @default(PENDING)
+  deadline      DateTime?
+  completedAt   DateTime?
+  mediaPublicId String?
+  order         Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  couple  Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [creatorId], references: [id])
+
+  @@index([coupleId])
+  @@index([coupleId, status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// CHAT
+// ─────────────────────────────────────────────────────────────
+
+model Message {
+  id             String    @id @default(cuid())
+  coupleId       String
+  senderId       String
+  content        String?
+  replyToId      String?
+  pinnedMemoryId String?
+  isEdited       Boolean   @default(false)
+  deletedForAll  Boolean   @default(false)
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  couple       Couple              @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  sender       User                @relation(fields: [senderId], references: [id])
+  replyTo      Message?            @relation("MessageReply", fields: [replyToId], references: [id])
+  replies      Message[]           @relation("MessageReply")
+  pinnedMemory Memory?             @relation("PinnedMemory", fields: [pinnedMemoryId], references: [id])
+  attachments  MessageAttachment[]
+  reactions    MessageReaction[]
+
+  @@index([coupleId])
+  @@index([coupleId, createdAt])
+  @@index([senderId])
+}
+
+model MessageAttachment {
+  id        String                @id @default(cuid())
+  messageId String
+  publicId  String                @unique
+  mediaType MessageAttachmentType
+  url       String
+  bytes     Int
+  createdAt DateTime              @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// COUNTDOWNS
+// ─────────────────────────────────────────────────────────────
+
+model Countdown {
+  id        String   @id @default(cuid())
+  coupleId  String
+  label     String
+  targetAt  DateTime
+  emoji     String?
+  repeat    String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  couple Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+
+  @@index([coupleId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  coupleId  String
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json             @default("{}")
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  couple Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([coupleId])
+  @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI
+// ─────────────────────────────────────────────────────────────
+
+model AiOutput {
+  id        String    @id @default(cuid())
+  coupleId  String
+  userId    String
+  task      AiTask
+  input     Json
+  output    String
+  model     String
+  tokens    Int
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  couple Couple @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([coupleId, task])
+  @@index([coupleId, task, createdAt])
+}

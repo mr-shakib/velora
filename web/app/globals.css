@@ -1,0 +1,118 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Velora Design Tokens ─────────────────────────────────── */
+:root {
+  /* Theme colors — controlled by ThemeProvider */
+  --clr-bg: #F8F4EC;
+  --clr-surface: #FFFFFF;
+  --clr-primary: #A8D5BA;
+  --clr-primary-dim: #8EC4A6;
+  --clr-secondary: #5C7A6B;
+  --clr-text: #2B2B2B;
+  --clr-muted: #8C8C8C;
+  --clr-border: #E5E0D8;
+  --clr-error: #D97070;
+  --clr-success: #6BBF9A;
+
+  /* Radius */
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+
+  /* Shadcn bridge — map Velora tokens to Shadcn vars */
+  --background: var(--clr-bg);
+  --foreground: var(--clr-text);
+  --card: var(--clr-surface);
+  --card-foreground: var(--clr-text);
+  --popover: var(--clr-surface);
+  --popover-foreground: var(--clr-text);
+  --primary: var(--clr-primary);
+  --primary-foreground: var(--clr-text);
+  --secondary: var(--clr-secondary);
+  --secondary-foreground: #ffffff;
+  --muted: var(--clr-bg);
+  --muted-foreground: var(--clr-muted);
+  --accent: var(--clr-primary-dim);
+  --accent-foreground: var(--clr-text);
+  --destructive: var(--clr-error);
+  --border: var(--clr-border);
+  --input: var(--clr-border);
+  --ring: var(--clr-primary);
+  --radius: 1.25rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    transition-property: background-color, border-color, color;
+    transition-duration: 300ms;
+    transition-timing-function: ease-in-out;
+  }
+
+  body {
+    background-color: var(--clr-bg);
+    color: var(--clr-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: var(--clr-primary);
+    color: var(--clr-text);
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--clr-border); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--clr-muted); }
+}
+
+/* ─── Velora Utilities ──────────────────────────────────────── */
+.velora-card {
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+}
+
+.velora-btn-primary {
+  background: var(--clr-primary);
+  color: var(--clr-text);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  transition: background 200ms, transform 100ms;
+}
+
+.velora-btn-primary:hover {
+  background: var(--clr-primary-dim);
+  transform: translateY(-1px);
+}
+
+.velora-btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ─── Animations ────────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--clr-border) 25%, var(--clr-surface) 50%, var(--clr-border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
