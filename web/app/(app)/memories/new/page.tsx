@@ -229,7 +229,7 @@ export default function NewMemoryPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Mood</Label>
-                <Select onValueChange={(v) => setValue('mood', v)}>
+                <Select onValueChange={(v) => setValue('mood', v as string)}>
                   <SelectTrigger style={{ borderColor: 'var(--clr-border)' }}>
                     <SelectValue placeholder="How were you feeling?" />
                   </SelectTrigger>

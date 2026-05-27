@@ -44,7 +44,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [socketRef] = useState<{ current: Socket | null }>({ current: null });
   const bottomRef = useRef<HTMLDivElement>(null);
-  const typingTimer = useRef<ReturnType<typeof setTimeout>>();
+  const typingTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { data, fetchNextPage, hasNextPage, isLoading } = useInfiniteQuery({
     queryKey: ['chat', 'history'],
