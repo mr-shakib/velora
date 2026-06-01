@@ -7,6 +7,13 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
+// Prisma maps BigInt columns (e.g. Couple.usedStorageBytes) to JS bigint, which
+// JSON.stringify cannot serialize — without this, any response containing a
+// couple throws "Do not know how to serialize a BigInt" and returns 500.
+(BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
+  return this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
