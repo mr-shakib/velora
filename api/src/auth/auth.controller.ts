@@ -95,9 +95,13 @@ export class AuthController {
     res.cookie('refresh_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+      // Frontend and API are served same-origin in prod (Next.js rewrite
+      // proxies /api/* to this server), so 'lax' is enough and the cookie is
+      // sent on top-level navigations — which the Next proxy middleware needs
+      // to read to gate routes. path '/' so it reaches page routes too.
+      sameSite: 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000,
-      path: '/api/auth',
+      path: '/',
     });
   }
 }

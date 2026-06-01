@@ -7,7 +7,13 @@ import { useThemeStore } from '@/lib/stores/theme.store';
 import { getAccessToken } from '@/lib/api/client';
 import { useQueryClient } from '@tanstack/react-query';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001';
+// WebSockets can't go through the Next.js rewrite proxy, so they connect to the
+// API host directly. NEXT_PUBLIC_SOCKET_URL must point at the API origin in prod
+// (where NEXT_PUBLIC_API_URL is the relative "/api").
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ||
+  'http://localhost:3001';
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
