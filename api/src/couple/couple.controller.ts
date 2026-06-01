@@ -4,6 +4,7 @@ import { User } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CoupleService } from './couple.service';
+import { Public } from '../common/decorators/public.decorator';
 import { IsDateString } from 'class-validator';
 
 class UpdateRelationshipStartDto {
@@ -20,6 +21,7 @@ export class CoupleController {
     return this.coupleService.createInvite(user.id);
   }
 
+  @Public()
   @Get('invite/:token')
   getInvitePreview(@Param('token') token: string) {
     return this.coupleService.getInvitePreview(token);

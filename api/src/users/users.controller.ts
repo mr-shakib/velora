@@ -3,11 +3,13 @@ import { User, MoodEmoji } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDate, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
 
 class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(50) displayName?: string;
   @IsOptional() @IsString() @MaxLength(300) bio?: string;
+  @IsOptional() @Type(() => Date) @IsDate() birthday?: Date;
   @IsOptional() timezone?: string;
   @IsOptional() avatarPublicId?: string;
 }
