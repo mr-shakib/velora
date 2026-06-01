@@ -4,7 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
-import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 
 interface JwtRefreshPayload {
   sub: string;
@@ -29,19 +29,24 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
 
   async validate(req: Request, payload: JwtRefreshPayload) {
     const token = req.cookies?.['refresh_token'];
-    if (!token) throw new UnauthorizedException();
+    if (!token || !payload?.jti) throw new UnauthorizedException();
 
-    const stored = await this.prisma.refreshToken.findFirst({
-      where: { userId: payload.sub, revokedAt: null },
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { id: payload.jti },
       include: { user: true },
     });
 
-    if (!stored || stored.expiresAt < new Date()) {
+    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token expired');
     }
 
-    const isValid = await bcrypt.compare(token, stored.tokenHash);
-    if (!isValid) throw new UnauthorizedException();
+    // Bind the presented token to the stored row (JWT signature is already
+    // verified by passport-jwt above; this rejects a different token reusing
+    // the same jti).
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    if (tokenHash !== stored.tokenHash || stored.userId !== payload.sub) {
+      throw new UnauthorizedException();
+    }
 
     return { user: stored.user, tokenId: stored.id };
   }

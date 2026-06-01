@@ -130,17 +130,36 @@ export class AuthService {
       },
     );
 
-    const rawRefresh = crypto.randomBytes(40).toString('hex');
-    const tokenHash = await bcrypt.hash(rawRefresh, 10);
-
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    await this.prisma.refreshToken.create({
-      data: { userId: user.id, tokenHash, deviceInfo: userAgent, expiresAt },
+    // Create the row first so its id can be embedded as the JWT's jti. The
+    // refresh token is a signed JWT (the JwtRefreshStrategy verifies it); the
+    // row gives us per-token revocation/rotation.
+    const record = await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: crypto.randomUUID(),
+        deviceInfo: userAgent,
+        expiresAt,
+      },
     });
 
-    return { accessToken, refreshToken: rawRefresh, user };
+    const refreshToken = this.jwt.sign(
+      { sub: user.id, jti: record.id },
+      {
+        secret: this.config.get('JWT_REFRESH_SECRET'),
+        expiresIn: '30d',
+      },
+    );
+
+    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    await this.prisma.refreshToken.update({
+      where: { id: record.id },
+      data: { tokenHash },
+    });
+
+    return { accessToken, refreshToken, user };
   }
 
   private async sendOtp(user: User) {
