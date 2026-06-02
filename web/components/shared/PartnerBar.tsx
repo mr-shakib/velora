@@ -5,7 +5,7 @@ import { useSocketStore } from '@/lib/stores/socket.store';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Bell, Wifi, WifiOff } from 'lucide-react';
+import { Bell, Wifi, WifiOff, Heart } from 'lucide-react';
 import Link from 'next/link';
 
 const MOOD_EMOJI: Record<string, string> = {
@@ -66,7 +66,13 @@ export function PartnerBar() {
             </div>
           </>
         ) : (
-          <span className="text-sm" style={{ color: 'var(--clr-muted)' }}>Waiting for partner…</span>
+          <Link
+            href="/invite-partner"
+            className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+            style={{ color: 'var(--clr-secondary)' }}
+          >
+            <Heart size={15} /> Invite your partner
+          </Link>
         )}
       </div>
 

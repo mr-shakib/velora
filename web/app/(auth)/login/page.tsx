@@ -36,12 +36,7 @@ export default function LoginPage() {
       const res = await authApi.login(data);
       setToken(res.data.accessToken);
       setUser(res.data.user);
-
-      if (!res.data.user.coupleId) {
-        router.push('/invite-partner');
-      } else {
-        router.push('/dashboard');
-      }
+      router.push('/dashboard');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Login failed';
       toast.error(msg);

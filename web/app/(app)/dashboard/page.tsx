@@ -128,7 +128,26 @@ export default function DashboardPage() {
           </>
         ) : couple ? (
           <>
-            <TogetherCounter start={couple.relationshipStart} />
+            {partner ? (
+              <TogetherCounter start={couple.relationshipStart} />
+            ) : (
+              <Card className="col-span-2" style={{ background: 'var(--clr-primary)', border: 'none' }}>
+                <CardContent className="pt-6 pb-5 text-center">
+                  <p className="text-4xl mb-2">💌</p>
+                  <p className="text-lg font-semibold" style={{ color: 'var(--clr-text)' }}>This is your space</p>
+                  <p className="text-sm mt-1 mb-4" style={{ color: 'var(--clr-secondary)' }}>
+                    Invite your partner to share it with them.
+                  </p>
+                  <Link
+                    href="/invite-partner"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium"
+                    style={{ background: 'var(--clr-surface)', color: 'var(--clr-text)' }}
+                  >
+                    <Heart size={15} /> Invite your partner
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
             {user && <MoodCard mood="HAPPY" name="Your mood" />}
             {partner && partnerMood && <MoodCard mood={partnerMood.mood} name={partner.displayName} />}
           </>

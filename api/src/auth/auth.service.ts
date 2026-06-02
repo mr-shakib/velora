@@ -12,6 +12,7 @@ import { User, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { createPersonalSpace } from '../common/spaces';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -60,15 +61,14 @@ export class AuthService {
 
     if (!otp) throw new BadRequestException('Invalid or expired code. Please request a new one.');
 
-    await this.prisma.$transaction([
-      this.prisma.otp.update({ where: { id: otp.id }, data: { usedAt: new Date() } }),
-      this.prisma.user.update({
-        where: { id: user.id },
-        data: { status: UserStatus.UNLINKED },
-      }),
-    ]);
+    await this.prisma.otp.update({ where: { id: otp.id }, data: { usedAt: new Date() } });
 
-    return this.issueTokens(user);
+    // Give the user their own space so they can use every feature immediately,
+    // with no partner required. createPersonalSpace sets coupleId + status.
+    await createPersonalSpace(this.prisma, user.id);
+    const verified = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
+    return this.issueTokens(verified);
   }
 
   async login(dto: LoginDto, userAgent?: string) {

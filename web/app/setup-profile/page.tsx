@@ -39,7 +39,7 @@ export default function SetupProfilePage() {
       const res = await apiClient.patch('/users/me', data);
       setUser(res.data.data);
       toast.success('Profile saved!');
-      router.push('/invite-partner');
+      router.push('/dashboard');
     } catch {
       toast.error('Failed to save profile');
     } finally {

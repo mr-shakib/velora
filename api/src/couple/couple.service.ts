@@ -8,6 +8,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CoupleStatus, InviteStatus, UserStatus, UnlinkRequester } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { createPersonalSpace } from '../common/spaces';
 
 @Injectable()
 export class CoupleService {
@@ -18,8 +19,14 @@ export class CoupleService {
 
   async createInvite(inviterId: string) {
     const inviter = await this.prisma.user.findUnique({ where: { id: inviterId } });
-    if (!inviter) throw new NotFoundException();
-    if (inviter.coupleId) throw new ConflictException('You are already linked with a partner.');
+    if (!inviter || !inviter.coupleId) throw new NotFoundException();
+
+    // A space holds at most two people. Solo (1 member) may invite; a full
+    // space (2 members) must leave the current partner first.
+    const members = await this.prisma.user.count({ where: { coupleId: inviter.coupleId } });
+    if (members >= 2) {
+      throw new ConflictException('Your space is full — leave your current partner first.');
+    }
 
     const existing = await this.prisma.inviteLink.findFirst({
       where: { inviterId, status: InviteStatus.PENDING, expiresAt: { gt: new Date() } },
@@ -62,30 +69,67 @@ export class CoupleService {
     }
 
     const acceptor = await this.prisma.user.findUnique({ where: { id: acceptorId } });
-    if (!acceptor) throw new NotFoundException();
-    if (acceptor.coupleId) throw new ConflictException('You are already linked with a partner.');
+    if (!acceptor || !acceptor.coupleId) throw new NotFoundException();
+
+    const inviterSpaceId = invite.inviter.coupleId;
+    if (!inviterSpaceId) throw new BadRequestException('This invite is no longer valid.');
+
+    // The inviter's space must still have room (they could have paired with
+    // someone else since creating the invite).
+    const inviterMembers = await this.prisma.user.count({ where: { coupleId: inviterSpaceId } });
+    if (inviterMembers >= 2) {
+      throw new ConflictException('This space is already full.');
+    }
+
+    // The acceptor must be solo. If they're already paired, they have to leave
+    // their current partner first — which needs that partner's permission.
+    const acceptorSpaceId = acceptor.coupleId;
+    const acceptorMembers = await this.prisma.user.count({ where: { coupleId: acceptorSpaceId } });
+    if (acceptorMembers >= 2) {
+      throw new ForbiddenException(
+        'Leave your current partner first to join another space (your partner must approve).',
+      );
+    }
 
     const couple = await this.prisma.$transaction(async (tx) => {
-      const newCouple = await tx.couple.create({
-        data: {
-          relationshipStart: new Date(),
-          members: { connect: [{ id: invite.inviterId }, { id: acceptorId }] },
-        },
+      // Merge the acceptor's solo data into the inviter's space.
+      const reassign = { where: { coupleId: acceptorSpaceId }, data: { coupleId: inviterSpaceId } };
+      await tx.memory.updateMany(reassign);
+      await tx.album.updateMany(reassign);
+      await tx.timelineEvent.updateMany(reassign);
+      await tx.message.updateMany(reassign);
+      await tx.plannerEvent.updateMany(reassign);
+      await tx.bucketItem.updateMany(reassign);
+      await tx.countdown.updateMany(reassign);
+      await tx.aiOutput.updateMany(reassign);
+      await tx.notification.updateMany(reassign);
+
+      // Move the acceptor into the inviter's space; the inviter keeps their theme.
+      await tx.user.update({
+        where: { id: acceptorId },
+        data: { coupleId: inviterSpaceId, status: UserStatus.ACTIVE },
+      });
+      await tx.user.update({
+        where: { id: invite.inviterId },
+        data: { status: UserStatus.ACTIVE },
       });
 
-      await tx.theme.create({ data: { coupleId: newCouple.id } });
-
-      await tx.user.updateMany({
-        where: { id: { in: [invite.inviterId, acceptorId] } },
-        data: { coupleId: newCouple.id, status: UserStatus.ACTIVE },
+      // Cancel any pending invites the acceptor had for their (now-gone) space.
+      await tx.inviteLink.updateMany({
+        where: { inviterId: acceptorId, status: InviteStatus.PENDING },
+        data: { status: InviteStatus.EXPIRED },
       });
 
       await tx.inviteLink.update({
         where: { id: invite.id },
-        data: { status: InviteStatus.ACCEPTED, acceptedAt: new Date(), coupleId: newCouple.id },
+        data: { status: InviteStatus.ACCEPTED, acceptedAt: new Date(), coupleId: inviterSpaceId },
       });
 
-      return newCouple;
+      // The acceptor's personal space is now empty — remove it and its theme.
+      await tx.theme.deleteMany({ where: { coupleId: acceptorSpaceId } });
+      await tx.couple.delete({ where: { id: acceptorSpaceId } });
+
+      return tx.couple.findUniqueOrThrow({ where: { id: inviterSpaceId } });
     });
 
     this.events.emit('couple.linked', { coupleId: couple.id, inviterId: invite.inviterId, acceptorId });
@@ -120,7 +164,13 @@ export class CoupleService {
       throw new BadRequestException('Cannot request unlink at this time.');
     }
 
-    const members = await this.prisma.user.findMany({ where: { coupleId: user.coupleId } });
+    const members = await this.prisma.user.findMany({
+      where: { coupleId: user.coupleId },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (members.length < 2) {
+      throw new BadRequestException("You don't have a partner to leave.");
+    }
     const requesterIndex = members[0].id === userId ? UnlinkRequester.USER1 : UnlinkRequester.USER2;
 
     const updated = await this.prisma.couple.update({
@@ -142,34 +192,37 @@ export class CoupleService {
 
     const couple = await this.prisma.couple.findUnique({
       where: { id: user.coupleId },
-      include: { members: true },
+      include: { members: { orderBy: { createdAt: 'asc' } } },
     });
 
     if (!couple || couple.status !== CoupleStatus.UNLINK_REQUESTED) {
       throw new BadRequestException('No unlink request is pending.');
     }
 
-    const requester = couple.members.find((m) =>
-      couple.unlinkRequestedBy === UnlinkRequester.USER1 ? m.id === couple.members[0].id : m.id === couple.members[1].id,
-    );
+    const requester =
+      couple.unlinkRequestedBy === UnlinkRequester.USER1 ? couple.members[0] : couple.members[1];
 
-    if (requester?.id === userId) {
-      throw new ForbiddenException('You initiated the unlink request. Waiting for your partner to confirm.');
+    if (!requester || requester.id === userId) {
+      throw new ForbiddenException('You initiated the request. Waiting for your partner to confirm.');
     }
 
-    await this.prisma.$transaction([
-      this.prisma.couple.update({
-        where: { id: user.coupleId },
-        data: { status: CoupleStatus.DISSOLVED, dissolvedAt: new Date() },
-      }),
-      this.prisma.user.updateMany({
-        where: { coupleId: user.coupleId },
-        data: { status: UserStatus.UNLINKED },
-      }),
-    ]);
+    // Permission granted: the requester leaves to a fresh empty personal space;
+    // the confirmer (this user) stays and keeps the space and all its data.
+    const sharedSpaceId = couple.id;
+    await this.prisma.$transaction(async (tx) => {
+      await createPersonalSpace(tx, requester.id);
+      await tx.couple.update({
+        where: { id: sharedSpaceId },
+        data: {
+          status: CoupleStatus.ACTIVE,
+          unlinkRequestedBy: null,
+          unlinkRequestedAt: null,
+        },
+      });
+    });
 
-    this.events.emit('couple.dissolved', { coupleId: user.coupleId });
-    return { message: 'Your shared space has been dissolved. Data will be deleted in 30 days.' };
+    this.events.emit('couple.unlinked', { coupleId: sharedSpaceId, leaverId: requester.id, stayerId: userId });
+    return { message: 'Your partner has left the space. Everything here is now yours.' };
   }
 
   async cancelUnlinkRequest(userId: string) {
