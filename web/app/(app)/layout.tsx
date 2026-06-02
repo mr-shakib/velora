@@ -27,6 +27,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
+  // Redirecting to /invite-partner — don't flash the (empty) app shell.
+  if (!user.coupleId) return null;
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--clr-bg)' }}>
